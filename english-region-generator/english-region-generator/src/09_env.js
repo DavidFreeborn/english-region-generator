@@ -363,58 +363,93 @@ function generate(params){
       const amp=noM?0:r.cls==="B"?0.05:0.22;
       r.draw=chaikin(amp>0?meander(r.pts,amp,r.cls==="lane"?3.2:4.5):r.pts,2);
     }
+    const owner=new Map();   // cell -> displaced [x,y] on the chain that drew it (global across rivers)
     for(const rv of world.rivers){
       /* r.cells is a tributary TREE, not a path: rebuild real chains by
-         walking flowTo from each source; joins run 2 cells into the
-         receiving stem so confluences draw smoothly */
+         walking flowTo from each source. Meander is applied to each
+         WHOLE chain (not per width-class run: independently phased
+         runs used to shear apart at class boundaries), the longest
+         chain is displaced first and owns the shared stem, and every
+         tributary's tail is pinned to the stem's DISPLACED position at
+         the confluence, so joins land on the water they join. */
       const inSet=new Set(rv.cells);
       const hasUp=new Set();
       for(const c of rv.cells){const j2=world.flowTo[c];if(inSet.has(j2))hasUp.add(j2);}
-      const visited=new Set();
       rv.drawRuns=[];
       const sources=rv.cells.filter(c=>!hasUp.has(c));
+      const rawChains=[];
       for(const s0 of sources){
-        const path=[];let c=s0,g=0,joinTail=0;
+        const full=[];let c=s0,g=0;
         while(g++<5000){
-          path.push(c);
-          if(visited.has(c)){joinTail++;if(joinTail>2)break;}
-          else visited.add(c);
+          full.push(c);
           const j2=world.flowTo[c];
           if(j2<0||!inSet.has(j2))break;   // stop on the last land cell
           c=j2;
         }
+        if(full.length>=3)rawChains.push(full);
+      }
+      rawChains.sort((q,w)=>w.length-q.length);   // mainstem first
+      for(const full of rawChains){
+        // cut at the join: run 2 cells into the already-drawn stem
+        const path=[];let joinTail=0;
+        for(const c of full){
+          path.push(c);
+          if(owner.has(c)){joinTail++;if(joinTail>2)break;}
+        }
         if(path.length<3)continue;
-        // split into class runs so width steps downstream
+        let pts=path.map(cc=>[cc%N,(cc/N)|0]);
+        // chain-level sinuosity: straight lowland reaches swing more
+        const a2=pts[0],b2=pts[pts.length-1];
+        const chord=Math.hypot(b2[0]-a2[0],b2[1]-a2[1]);
+        const straightness=pts.length>6?chord/(pts.length-1):0;
+        let amp=Math.min(0.85,0.22+Math.max(1,world.river[path[Math.floor(path.length/2)]]||1)*0.17);
+        let wl=3.0;
+        if(straightness>0.8){amp=Math.min(1.5,0.45+pts.length*0.03);wl=6+jr.f()*5;}
+        if(pts.length>20){
+          const ampL=Math.min(2.6,pts.length*0.055)*Math.max(0.35,straightness);
+          pts=meander(pts,ampL,20+jr.f()*16);
+        }
+        pts=meander(pts,amp,wl);
+        /* pin the tail: points on the owned stem take the stem's
+           displaced coordinates exactly, and the approach is eased in
+           by translating the last few free points toward the junction's
+           displacement, so the tributary lands ON the drawn stem */
+        let firstOwned=-1;
+        for(let k2=0;k2<path.length;k2++)if(owner.has(path[k2])){firstOwned=k2;break;}
+        if(firstOwned>=0){
+          const dJ=owner.get(path[firstOwned]);
+          const raw=[path[firstOwned]%N,(path[firstOwned]/N)|0];
+          const dx2=dJ[0]-raw[0],dy2=dJ[1]-raw[1];
+          for(let b3=1;b3<=4;b3++){
+            const q2=firstOwned-b3;if(q2<0)break;
+            const w2=1-b3/5;
+            pts[q2]=[pts[q2][0]+dx2*w2,pts[q2][1]+dy2*w2];
+          }
+          for(let k2=firstOwned;k2<path.length;k2++){
+            const d2=owner.get(path[k2]);
+            if(d2)pts[k2]=[d2[0],d2[1]];
+          }
+        }
+        for(let k2=0;k2<path.length;k2++)
+          if(!owner.has(path[k2]))owner.set(path[k2],pts[k2]);
+        // split the displaced chain into class runs so width steps downstream
         let run=null,cls0=-1;
-        for(const cc of path){
-          const cl=Math.max(1,world.river[cc]||1);
+        for(let k2=0;k2<path.length;k2++){
+          const cl=Math.max(1,world.river[path[k2]]||1);
           if(cl!==cls0){
             if(run&&run.pts.length>1)rv.drawRuns.push(run);
             run={cls:cl,pts:run?[run.pts[run.pts.length-1]]:[]};cls0=cl;
           }
-          run.pts.push([cc%N,(cc/N)|0]);
+          run.pts.push(pts[k2]);
         }
         if(run&&run.pts.length>1)rv.drawRuns.push(run);
       }
-      // estuary: the last reach before the sea broadens
+      // estuary flag, corner-cut, and coastline trim per run
       for(const rr of rv.drawRuns){
         const last=rr.pts[rr.pts.length-1];
         const li=Math.round(last[1])*N+Math.round(last[0]);
         rr.mouth=world.sea[li]?1:0;
-        let amp=Math.min(0.85,0.22+rr.cls*0.17);
-        // dead-straight reaches (flat lowland D8) get extra sinuosity
-        const a2=rr.pts[0],b2=rr.pts[rr.pts.length-1];
-        const chord=Math.hypot(b2[0]-a2[0],b2[1]-a2[1]);
-        const straightness=rr.pts.length>6?chord/(rr.pts.length-1):0;
-        let wl=3.0;
-        if(straightness>0.8){amp=Math.min(1.5,0.45+rr.pts.length*0.03);wl=6+jr.f()*5;}
-        // every long reach swings slowly off its trend, in proportion
-        // to how straight it runs; no threshold cliff
-        if(rr.pts.length>20){
-          const ampL=Math.min(2.6,rr.pts.length*0.055)*Math.max(0.35,straightness);
-          rr.pts=meander(rr.pts,ampL,20+jr.f()*16);
-        }
-        rr.pts=chaikin(meander(rr.pts,amp,wl),2);
+        rr.pts=chaikin(rr.pts,2);
         // smoothing can overshoot the coastline: trim to the last land point
         while(rr.pts.length>2){
           const q2=rr.pts[rr.pts.length-1];

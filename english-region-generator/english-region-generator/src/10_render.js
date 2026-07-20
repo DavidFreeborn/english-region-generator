@@ -401,9 +401,9 @@ function drawScene(cv,world,state){
     ctx.imageSmoothingEnabled=true;
   }
 
-  /* rivers */
+  /* rivers (toggle: showRivers) */
   ctx.lineCap="round";ctx.lineJoin="round";
-  for(const r of world.rivers){
+  for(const r of (state.showRivers===false?[]:world.rivers)){
     ctx.lineCap="round";ctx.lineJoin="round";
     if(r.drawRuns){
       const wBase=Math.min(1.6,Math.max(0.7,sc/4));

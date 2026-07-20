@@ -41,7 +41,7 @@ function makeRouter(world){
     const h=(i)=>{const x=i%N,y=(i/N)|0;return dist(x,y,bx,by);};
     const rr=world.roadRaster;
     function cellCost(i){
-      if(sea[i]) return mode==="rail"&&opts.coastOk?60:1e6;
+      if(sea[i]) return mode==="rail"&&opts.coastOk?60:Infinity;   // open water is a wall, not a toll
       const sl=slope[i];
       let c=1;
       // organic deviation: motorways engineered straighter, lanes wander most
@@ -114,6 +114,22 @@ function chaikin(pts,iters){
   return p;
 }
 
+/* concatenated alignments (motorway halves, ring segments) can double
+   back on themselves where the legs meet: excise any short loop where
+   the path revisits a cell it passed within the last ~45 steps */
+function pruneLoops(pts){
+  const seen=new Map();const out=[];
+  for(const p of pts){
+    const k=Math.round(p[0])+","+Math.round(p[1]);
+    const prev=seen.get(k);
+    if(prev!==undefined&&out.length-prev<=45&&out.length-prev>=2){
+      for(let j=prev+1;j<out.length;j++)seen.delete(Math.round(out[j][0])+","+Math.round(out[j][1]));
+      out.length=prev+1;
+    }else{seen.set(k,out.length);out.push(p);}
+  }
+  return out;
+}
+
 function stampRoad(world,pts,cls){
   const {N}=world;const idx=(x,y)=>y*N+x;
   for(const[x,y]of pts){const i=idx(x,y);if(world.roadRaster[i]<cls)world.roadRaster[i]=cls;}
@@ -145,9 +161,18 @@ function buildHistoricRoads(world){
   // Roman road: two straight-ish legs through the town, border to border
   if(main.origin==="roman"){
     const th=rng.range(0,Math.PI);
-    const far=N*1.5;
-    const ends=[[main.x+Math.cos(th)*far,main.y+Math.sin(th)*far],[main.x-Math.cos(th)*far,main.y-Math.sin(th)*far]]
-      .map(([x,y])=>[clamp(Math.round(x),1,N-2),clamp(Math.round(y),1,N-2)]);
+    /* each leg's end is walked inward from the border until it stands on
+       land; a leg whose whole bearing lies over the sea is dropped (the
+       road went to a port that is off this sheet) */
+    const romanEnd=(sign)=>{
+      for(let t=1.5;t>0.2;t-=0.02){
+        const x=clamp(Math.round(main.x+sign*Math.cos(th)*N*t),1,N-2);
+        const y=clamp(Math.round(main.y+sign*Math.sin(th)*N*t),1,N-2);
+        if(!world.sea[y*N+x])return [x,y];
+      }
+      return null;
+    };
+    const ends=[romanEnd(1),romanEnd(-1)].filter(Boolean);
     for(const[ex,ey]of ends){
       // clip to border by walking from town outward: route to clamped end
       const p=route(main.x,main.y,ex,ey,"roman");
@@ -187,11 +212,51 @@ function buildHistoricRoads(world){
     .filter(([sd])=>world.edges[sd]!=="sea")            // no road runs into the sea
     .map(([,x2,y2])=>[x2,y2]);
   let exits=0;
+  const exitCap=Math.min(Math.max(1,edgesPts.length),world.rng.chance(0.55)?3:2);
   for(const[ex,ey]of world.rng.shuffle(edgesPts.slice())){
-    if(exits>=2)break;
+    if(exits>=exitCap)break;
     const i=ey*N+ex; if(world.sea[i])continue;
     const p=route(main.x,main.y,ex,ey,"road");
     if(p){world.roads.push({cls:"A",pts:p,name:roadNumber(world,exits===0),era:"turnpike"});stampRoad(world,p,ROADCLASS.A);exits++;}
+  }
+
+  /* -------- classified roads continue beyond the sheet --------
+     A road that ends at a town near the survey edge did not, in
+     reality, end there: it carried on to the next county. Extend such
+     ends outward on their own bearing, usually but not always (a few
+     genuine termini survive). */
+  {
+    const extended=new Set();
+    for(const r of world.roads){
+      if(!["A","B"].includes(r.cls)||r.roman||r.era==="turnpike")continue;
+      for(const endIdx of [0,r.pts.length-1]){
+        const p2=r.pts[endIdx];
+        const eDist=Math.min(p2[0],p2[1],N-1-p2[0],N-1-p2[1]);
+        if(eDist<5||eDist>N*0.30)continue;               // already there, or deep inland
+        const tk=Math.round(p2[0]/3)+","+Math.round(p2[1]/3);
+        if(extended.has(tk))continue;                     // one continuation per place
+        if(!rng.chance(0.65))continue;                    // NOT always: some roads do end
+        const q=r.pts[endIdx===0?Math.min(6,r.pts.length-1):Math.max(0,r.pts.length-7)];
+        let hx=p2[0]-q[0],hy=p2[1]-q[1];const L2=Math.hypot(hx,hy)||1;hx/=L2;hy/=L2;
+        // walk the bearing to the border; give up if it runs into the sea
+        let tx=-1,ty=-1;
+        for(let t=1;t<N;t++){
+          const X=Math.round(p2[0]+hx*t),Y=Math.round(p2[1]+hy*t);
+          if(X<1||Y<1||X>N-2||Y>N-2){tx=clamp(X,1,N-2);ty=clamp(Y,1,N-2);break;}
+          if(world.sea[Y*N+X]){tx=-1;break;}
+          tx=X;ty=Y;
+        }
+        if(tx<0)continue;
+        if(Math.min(tx,ty,N-1-tx,N-1-ty)>3)continue;      // bearing never reached the edge
+        const ext=route(p2[0],p2[1],tx,ty,"road");
+        if(ext&&ext.length>3){
+          extended.add(tk);
+          if(endIdx===0)r.pts=ext.slice().reverse().concat(r.pts);
+          else r.pts=r.pts.concat(ext.slice(1));
+          stampRoad(world,ext,ROADCLASS[r.cls]);
+        }
+      }
+    }
   }
 
 
@@ -369,17 +434,26 @@ function buildMotorway(world){
   else{
     world.motorway=null;
     const offs=6/world.cellKm;
-    for(let attempt=0;attempt<10&&!world.motorway;attempt++){
+    for(let attempt=0;attempt<14&&!world.motorway;attempt++){
       const dirTheta=rng.range(0,Math.PI);
       const nx=Math.cos(dirTheta+Math.PI/2),ny=Math.sin(dirTheta+Math.PI/2);
       const cx=clamp(main.x+nx*offs,10,N-10),cy=clamp(main.y+ny*offs,10,N-10);
       if(world.sea[idx(Math.round(cx),Math.round(cy))])continue;
-      // walk each end inward from the border until it is on land
+      /* walk each end inward from the border until it is on land. A
+         motorway is a THROUGH route: an end that comes to rest well
+         inside the sheet (because the bearing points out to sea) is a
+         failed attempt, and the direction is re-drawn; only after the
+         strict attempts are exhausted is a coastal terminus accepted
+         (heavily marine counties may have no border-to-border corridor). */
+      const strict=attempt<8;
       const endAt=sign=>{
         for(let t=1;t>0.25;t-=0.03){
-          const x=clamp(Math.round(cx+sign*Math.cos(dirTheta)*N*t),2,N-3);
-          const y=clamp(Math.round(cy+sign*Math.sin(dirTheta)*N*t),2,N-3);
-          if(!world.sea[idx(x,y)])return [x,y];
+          const x=clamp(Math.round(cx+sign*Math.cos(dirTheta)*N*t),1,N-2);
+          const y=clamp(Math.round(cy+sign*Math.sin(dirTheta)*N*t),1,N-2);
+          if(!world.sea[idx(x,y)]){
+            if(strict&&Math.min(x,y,N-1-x,N-1-y)>5)return null;
+            return [x,y];
+          }
         }
         return null;
       };
@@ -388,7 +462,7 @@ function buildMotorway(world){
       const p1=route(a[0],a[1],Math.round(cx),Math.round(cy),"motorway");
       const p2=route(Math.round(cx),Math.round(cy),b[0],b[1],"motorway");
       if(p1&&p2){
-        const pts=p1.concat(p2.slice(1));
+        const pts=pruneLoops(p1.concat(p2.slice(1)));
         world.motorway={pts,name:motorwayNumber(world)};
         world.roads.push({cls:"motorway",pts,name:world.motorway.name,era:"postwar"});
         stampRoad(world,pts,ROADCLASS.motorway);
@@ -444,6 +518,6 @@ function buildMotorway(world){
       const p=route(segs[k][0],segs[k][1],segs[k+1][0],segs[k+1][1],"motorway");
       if(p)ring=ring.concat(k===0?p:p.slice(1));
     }
-    if(ring.length>8){world.roads.push({cls:"Adual",pts:ring,name:roadNumber(world,false),era:"postwar",ring:true});stampRoad(world,ring,ROADCLASS.Adual);}
+    if(ring.length>8){ring=pruneLoops(ring);world.roads.push({cls:"Adual",pts:ring,name:roadNumber(world,false),era:"postwar",ring:true});stampRoad(world,ring,ROADCLASS.Adual);}
   }
 }

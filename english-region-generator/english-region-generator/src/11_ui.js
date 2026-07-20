@@ -7,32 +7,39 @@ function esc(v){return String(v??"").replace(/[&<>"']/g,c=>({"&":"&amp;","<":"&l
    ============================================================ */
 
 const LENSES=[
+  // land: what the ground is
   ["map","Survey sheet","hypsometric tint with hillshade"],
   ["relief","Relief","elevation"],
   ["geology","Bedrock geology","formations and faults"],
   ["soil","Soils","series from geology and drainage"],
   ["flood","Flood risk","fluvial and coastal"],
+  ["bio","Biodiversity","habitat index"],
+  // built form: what stands on it
   ["landuse","Land use","detailed"],
   ["function","Urban function","broad classes"],
   ["era","Housing age","construction era"],
+  // people: who lives there
   ["density","Population density","persons per km²"],
   ["age","Median age","by district"],
   ["eth","Ethnicity","largest minority group"],
   ["degree","Degree educated","working-age share"],
+  // economy & outcomes
   ["income","Household income","median, by district"],
   ["price","House prices","median, by district"],
   ["gva","GVA per head","by district"],
   ["imd","Deprivation","decile, 1 most deprived"],
   ["crime","Crime","offences per 1,000"],
   ["le","Life expectancy","at birth, by district"],
-  ["transport","Transport","network and stations"],
-  ["access","Transport access","by district"],
+  // services
   ["schools","School places","pressure on primaries"],
   ["health","Hospital access","distance to acute care"],
+  // movement and its externalities
+  ["transport","Transport","network and stations"],
+  ["access","Transport access","by district"],
   ["traffic","Traffic","AM peak flows"],
   ["noise","Noise","Lden"],
   ["air","Air quality","NO2 annual mean"],
-  ["bio","Biodiversity","habitat index"],
+  // administration
   ["wards","Wards & parishes","administrative geography"],
   ["politics","Voting","modelled shares"],
 ];
@@ -252,7 +259,7 @@ function bootUI(){
   cv.addEventListener("mousemove",e=>{
     if(!APP.world||pan&&pan.moved)return;
     const [x,y]=toCell(e);
-    if(x<0||y<0||x>=APP.world.N||y>=APP.world.N){$("readout").textContent="—";return;}
+    if(x<0||y<0||x>=APP.world.N||y>=APP.world.N){$("readout").textContent="–";return;}
     updateReadout(x,y,e);
   });
 
@@ -281,9 +288,23 @@ function paramsFromUI(){
     const sides=["N","E","S","W"];
     for(const s2 of sides)$("e"+s2).value=["flat","flat","mountains","sea"][Math.floor(rng()*4)];
     if(![..."NESW"].some(s2=>$("e"+s2).value!=="sea"))$("eW").value="flat";
-    const pairs=[["W","E"],["N","S"],["N","E"],["W","S"],["S","E"],["E","W"]];
-    $("river").value=rng()<0.85?pairs[Math.floor(rng()*pairs.length)].join("-"):"none";
-    $("river2").value=rng()<0.3?["N-S","S-E","N-E","W-S"][Math.floor(rng()*4)]:"none";
+    /* rivers: only values the selects actually offer, and only pairs
+       consistent with the drawn edges: a river should not be asked to
+       LEAVE through a mountain wall, and if the county has a coast the
+       requested outlet should usually be a sea edge */
+    const edgeOf=s2=>$("e"+s2).value;
+    const pickRiver=(cands)=>{
+      let ok=cands.filter(p=>edgeOf(p[1])!=="mountains");
+      if(!ok.length)ok=cands;
+      const toSea=ok.filter(p=>edgeOf(p[1])==="sea");
+      if(toSea.length&&rng()<0.8)ok=toSea;
+      return ok[Math.floor(rng()*ok.length)].join("-");
+    };
+    const RIVER1=[["W","E"],["E","W"],["N","S"],["S","N"],["N","E"],["W","S"]];
+    const RIVER2=[["N","S"],["S","E"],["N","E"],["W","S"]];
+    $("river").value=rng()<0.85?pickRiver(RIVER1):"none";
+    $("river2").value=rng()<0.3?pickRiver(RIVER2):"none";
+    if($("river2").value===$("river").value)$("river2").value="none";
     $("surprise").checked=false;
     for(const id of ["eN","eE","eS","eW","river","river2"])$(id).disabled=false;
   }
@@ -359,7 +380,7 @@ function regenerate(){
     traffic:"counting the traffic",env:"surveying air and water"};
   wk.onmessage=(ev)=>{
     const m=ev.data;
-    if(m.type==="stage"){$("veiltext").textContent="Surveying "+nm2+" — "+(STAGE_LABEL[m.name]||m.name)+"…";return;}
+    if(m.type==="stage"){$("veiltext").textContent="Surveying "+nm2+" · "+(STAGE_LABEL[m.name]||m.name)+"…";return;}
     if(m.type==="error"){
       console.error("worker:",m.message);
       wk.terminate();__worker=null;   // fall back to the main thread
@@ -795,7 +816,7 @@ function renderLegend(){
     case "noise":h+=legGrad(rampCss("heat",0),rampCss("heat",1),"45 dB","75 dB","L<sub>den</sub> .");break;
     case "bio":h+=legGrad(rampCss("green",0),rampCss("green",1),"low","high","Habitat quality; estuaries, ancient woods and disused rail corridors score highest.");break;
   }
-  el.innerHTML=h||"<span style='color:var(--ink2)'>—</span>";
+  el.innerHTML=h||"<span style='color:var(--ink2)'>–</span>";
 }
 
 /* ---------- economy panel ---------- */
