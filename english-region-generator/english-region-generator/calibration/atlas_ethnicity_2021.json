@@ -1,0 +1,40 @@
+{
+  "provenance": {
+    "source": "ONS Census 2021 via Cabinet Office Ethnicity Facts and Figures service",
+    "url": "https://www.ethnicity-facts-figures.service.gov.uk/uk-population-by-ethnicity/national-and-regional-populations/regional-ethnic-diversity/latest/downloads/population-by-ethnicity-and-local-authority-2021.csv",
+    "retrieved": "2026-07-18",
+    "classification": "ONS 2021 19+1, % of local authority population",
+    "limitations": [
+      "Sample truncated by retrieval token cap: 23 complete LAD profiles of 331 in the source file; ordering by LAD code biases the sample toward E06 unitary authorities",
+      "No London boroughs, no E08 metropolitan boroughs with complete profiles (Bradford, Kirklees, Oldham absent); Blackburn with Darwen is the only Pennine textile authority captured",
+      "Group mapping: WhiteOther = White Irish + Any Other White; Mixed = sum of four mixed categories; Other = residual to 100 (absorbs Other Asian, Arab, Any Other, Other Black, Gypsy/Roma and rounding)",
+      "Census 2021 field definitions and disclosure control per ONS; values are % rounded to 0.1 in source"
+    ],
+    "group_order": ["WB","WhiteOther","Pak","Ind","Bang","BlkAfr","BlkCar","Chin","Mixed","Other"]
+  },
+  "lads": [
+    {"code":"E06000001","name":"Hartlepool","region":"north-east","cls":"town","v":[95.0,1.4,0.3,0.4,0.3,0.4,0.1,0.2,0.7,1.2]},
+    {"code":"E06000002","name":"Middlesbrough","region":"north-east","cls":"city","v":[79.5,2.5,6.2,1.9,0.4,2.3,0.1,0.5,2.1,4.5]},
+    {"code":"E06000003","name":"Redcar and Cleveland","region":"north-east","cls":"rural","v":[96.5,1.1,0.2,0.1,0.1,0.1,0.0,0.2,0.9,0.8]},
+    {"code":"E06000004","name":"Stockton-on-Tees","region":"north-east","cls":"town","v":[90.3,1.6,2.5,0.9,0.1,0.9,0.1,0.4,1.4,1.8]},
+    {"code":"E06000005","name":"Darlington","region":"north-east","cls":"town","v":[90.3,3.6,0.2,1.0,0.7,0.4,0.1,0.3,1.4,2.0]},
+    {"code":"E06000006","name":"Halton","region":"north-west","cls":"town","v":[93.6,2.7,0.1,0.3,0.0,0.2,0.1,0.3,1.4,1.3]},
+    {"code":"E06000007","name":"Warrington","region":"north-west","cls":"town","v":[88.1,5.2,0.8,1.1,0.1,0.5,0.1,0.6,1.6,1.9]},
+    {"code":"E06000008","name":"Blackburn with Darwen","region":"north-west","cls":"millTown","v":[56.9,3.3,17.8,15.8,1.0,0.7,0.1,0.3,1.7,2.4]},
+    {"code":"E06000009","name":"Blackpool","region":"north-west","cls":"town","v":[90.4,4.0,0.4,0.6,0.3,0.3,0.1,0.4,1.6,1.9]},
+    {"code":"E06000010","name":"Kingston upon Hull","region":"yorkshire","cls":"city","v":[83.9,7.6,0.5,0.5,0.5,1.6,0.1,0.5,1.7,3.1]},
+    {"code":"E06000011","name":"East Riding of Yorkshire","region":"yorkshire","cls":"rural","v":[94.6,2.6,0.2,0.4,0.0,0.2,0.1,0.2,0.9,0.8]},
+    {"code":"E06000012","name":"North East Lincolnshire","region":"yorkshire","cls":"town","v":[92.6,3.5,0.2,0.3,0.2,0.4,0.1,0.3,1.0,1.4]},
+    {"code":"E06000013","name":"North Lincolnshire","region":"yorkshire","cls":"town","v":[88.7,5.3,0.6,0.7,1.1,0.4,0.1,0.3,1.1,1.7]},
+    {"code":"E06000014","name":"York","region":"yorkshire","cls":"city","v":[87.3,5.2,0.3,0.9,0.2,0.5,0.1,1.4,1.8,2.3]},
+    {"code":"E06000015","name":"Derby","region":"east-midlands","cls":"city","v":[66.2,7.0,8.0,4.8,0.3,2.3,1.2,0.5,3.7,6.0]},
+    {"code":"E06000016","name":"Leicester","region":"east-midlands","cls":"city","v":[33.2,7.3,3.4,34.3,1.9,5.8,1.2,0.7,3.8,8.4]},
+    {"code":"E06000017","name":"Rutland","region":"east-midlands","cls":"rural","v":[91.0,3.4,0.1,0.6,0.0,0.6,0.5,0.4,1.8,1.6]},
+    {"code":"E06000018","name":"Nottingham","region":"east-midlands","cls":"city","v":[57.3,8.1,6.7,3.6,0.7,5.8,2.9,1.3,5.9,7.7]},
+    {"code":"E06000019","name":"Herefordshire","region":"west-midlands","cls":"rural","v":[91.1,5.5,0.1,0.5,0.0,0.2,0.1,0.2,1.1,1.2]},
+    {"code":"E06000020","name":"Telford and Wrekin","region":"west-midlands","cls":"town","v":[83.0,5.0,1.8,2.5,0.1,2.1,0.4,0.4,2.6,2.1]},
+    {"code":"E06000021","name":"Stoke-on-Trent","region":"west-midlands","cls":"city","v":[78.5,4.7,6.0,1.1,0.6,2.0,0.4,0.4,2.3,4.0]},
+    {"code":"E06000022","name":"Bath and North East Somerset","region":"south-west","cls":"city","v":[85.6,6.4,0.1,0.9,0.2,0.5,0.3,1.1,2.7,2.2]},
+    {"code":"E06000023","name":"Bristol","region":"south-west","cls":"city","v":[71.6,9.2,1.9,1.8,0.6,3.8,1.4,1.2,4.5,4.0]}
+  ]
+}

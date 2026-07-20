@@ -1,0 +1,479 @@
+<!DOCTYPE html>
+<html lang="en-GB">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>English Region Generator</title>
+<style>
+:root{
+  --paper:#f1eee1; --paper2:#e9e5d4; --panel:#ece8d9; --ink:#26323c; --ink2:#5a6672;
+  --rule:#c9c3b0; --red:#a33b2e; --blue:#4b7fb5; --contour:#c08552;
+  --disp:"Gill Sans","Gill Sans MT","Trebuchet MS",sans-serif;
+  --body:Charter,Georgia,"Times New Roman",serif;
+  --mono:ui-monospace,"SF Mono",Menlo,Consolas,monospace;
+}
+*{box-sizing:border-box;margin:0;padding:0}
+html,body{height:100%}
+body{background:#dcd7c4;color:var(--ink);font-family:var(--body);font-size:14px;
+  display:flex;flex-direction:column;overflow:hidden}
+button,select,input{font-family:var(--disp);color:var(--ink)}
+::selection{background:#c0855266}
+
+/* ---- sheet title block ---- */
+header{background:var(--paper);border-bottom:2px solid var(--ink);
+  display:flex;align-items:baseline;gap:18px;padding:10px 20px 8px;flex-wrap:wrap}
+.tb-eyebrow{font-family:var(--disp);font-size:10px;letter-spacing:.22em;color:var(--red);text-transform:uppercase}
+h1{font-family:var(--disp);font-weight:600;font-size:26px;letter-spacing:.10em;line-height:1}
+.tb-sub{font-family:var(--mono);font-size:10.5px;color:var(--ink2)}
+header .spacer{flex:1}
+#methBtn{background:none;border:1px solid var(--ink);padding:5px 12px;font-size:11px;
+  letter-spacing:.08em;text-transform:uppercase;cursor:pointer}
+#methBtn:hover{background:var(--ink);color:var(--paper)}
+
+/* ---- main grid ---- */
+main{flex:1;display:grid;grid-template-columns:250px 1fr 300px;min-height:0}
+@media(max-width:980px){main{grid-template-columns:1fr;grid-template-rows:auto 1fr auto;overflow:auto}}
+
+/* controls rail */
+#rail{background:var(--panel);border-right:1px solid var(--rule);padding:14px;overflow-y:auto}
+.ctl{margin-bottom:11px}
+.ctl label{display:block;font-family:var(--disp);font-size:10px;letter-spacing:.14em;
+  text-transform:uppercase;color:var(--ink2);margin-bottom:3px}
+.ctl select,.ctl input{width:100%;padding:5px 7px;border:1px solid var(--rule);
+  background:var(--paper);font-size:12.5px}
+.edges{display:grid;grid-template-columns:1fr 1fr;gap:6px}
+.seedrow{display:flex;gap:6px}
+.seedrow input{flex:1}
+#dice{border:1px solid var(--rule);background:var(--paper);width:34px;cursor:pointer;font-size:15px}
+#go{width:100%;background:var(--ink);color:var(--paper);border:none;padding:9px;
+  font-size:12px;letter-spacing:.16em;text-transform:uppercase;cursor:pointer;margin-top:4px}
+#go:hover{background:var(--red)}
+.railhead{font-family:var(--disp);font-size:10px;letter-spacing:.2em;text-transform:uppercase;
+  color:var(--red);border-bottom:1px solid var(--rule);padding-bottom:4px;margin:16px 0 9px}
+.railhead:first-child{margin-top:0}
+
+/* lens legend */
+#lenses{display:flex;flex-direction:column;gap:1px}
+.lens{display:grid;grid-template-columns:14px 1fr;grid-template-rows:auto;gap:0 8px;
+  align-items:center;text-align:left;background:none;border:none;border-left:3px solid transparent;
+  padding:4px 6px;cursor:pointer}
+.lens:hover{background:var(--paper)}
+.lens.on{border-left-color:var(--red);background:var(--paper)}
+.lens .sw{grid-row:1/3;width:12px;height:12px;border:1px solid var(--ink2);border-radius:2px}
+.lens .ll{font-family:var(--disp);font-size:12.5px}
+.lens .ls{font-family:var(--mono);font-size:9px;color:var(--ink2)}
+
+/* map sheet */
+#sheet{position:relative;display:flex;align-items:stretch;justify-content:stretch;
+  background:var(--paper2);min-height:0;padding:12px}
+#frame{position:relative;background:var(--paper);border:1.5px solid var(--ink);
+  box-shadow:0 2px 14px rgba(38,50,60,.18);padding:16px;flex:1;display:flex;min-width:0;min-height:0}
+#mapbox{position:relative;flex:1;min-width:0;min-height:0}
+@media(max-width:900px){
+  #app{grid-template-columns:1fr !important;grid-template-rows:auto auto 62vh auto !important}
+  #left{max-height:none;border-right:none;border-bottom:2px solid var(--ink);order:2}
+  #left .ctl{display:inline-block;margin:3px 6px 3px 0;vertical-align:top}
+  #lenses{display:flex;flex-wrap:wrap;gap:4px}
+  .lens{padding:7px 10px;border:1px solid var(--ink2)}
+  #sheet{order:1;padding:6px;min-height:62vh}
+  #right{border-left:none;order:3}
+  #zoomui button{width:44px;height:44px;font-size:20px}
+  #maplegend{max-width:46vw;font-size:10.5px}
+  #frame{padding:6px}
+}
+#map{display:block;background:var(--paper);position:absolute;inset:0;cursor:grab;touch-action:none}
+#map.panning{cursor:grabbing}
+#zoomui{position:absolute;top:8px;right:8px;display:flex;flex-direction:column;gap:4px;z-index:5}
+#zoomui button{width:30px;height:30px;background:var(--paper);border:1.5px solid var(--ink);
+  font-size:15px;cursor:pointer;font-family:var(--disp)}
+#zoomui button:hover{background:var(--ink);color:var(--paper)}
+.btn2{background:var(--paper);border:1.5px solid var(--ink);padding:5px 9px;font-family:var(--disp);font-size:11px;cursor:pointer}
+.btn2:hover{background:var(--ink);color:var(--paper)}
+#maplegend{position:absolute;left:8px;bottom:8px;z-index:5;max-width:250px;max-height:46%;
+  overflow-y:auto;background:rgba(241,238,225,.94);border:1.5px solid var(--ink);
+  padding:9px 11px;font-size:11.5px;box-shadow:0 2px 10px rgba(38,50,60,.15)}
+#maplegend:empty{display:none}
+/* sheet margin grid letters */
+.gridrefs{position:absolute;font-family:var(--mono);font-size:8.5px;color:var(--ink2);
+  display:flex;justify-content:space-around;pointer-events:none}
+.gr-top{top:2px;left:16px;right:16px}
+.gr-bot{bottom:2px;left:16px;right:16px}
+.gr-l{left:2px;top:16px;bottom:16px;flex-direction:column}
+.gr-r{right:2px;top:16px;bottom:16px;flex-direction:column}
+#readout{position:absolute;left:16px;bottom:-1px;transform:translateY(100%);
+  font-family:var(--mono);font-size:10px;color:var(--ink2);padding-top:5px;
+  white-space:nowrap;overflow:hidden;max-width:calc(100% - 32px)}
+#scalebar{position:absolute;right:16px;bottom:-1px;transform:translateY(100%);
+  font-family:var(--mono);font-size:9px;color:var(--ink2);padding-top:5px}
+
+/* right rail: story + facts + ward panel */
+#right{background:var(--panel);border-left:1px solid var(--rule);overflow-y:auto;
+  padding:14px;position:relative}
+#story{font-size:13px;line-height:1.5;margin-bottom:6px}
+.fr{display:flex;justify-content:space-between;gap:8px;font-size:12px;
+  border-bottom:1px dotted var(--rule);padding:3.5px 0}
+.fr b{font-family:var(--disp);font-weight:600}
+
+/* ward panel */
+#ward{display:none;background:var(--paper);border:1.5px solid var(--ink);margin-bottom:14px}
+#ward.open{display:block}
+body.wardOpen #countyInfo{display:none}
+#whead{padding:10px 12px 8px;border-bottom:1.5px solid var(--ink);display:flex;align-items:start;gap:8px}
+#wname{font-family:var(--disp);font-size:19px;font-weight:600;letter-spacing:.04em;flex:1}
+#wkind{font-family:var(--mono);font-size:10px;color:var(--ink2)}
+#wclose{background:none;border:1px solid var(--rule);width:26px;height:26px;cursor:pointer}
+#wbody{padding:10px 12px 14px}
+.wsec{margin-bottom:14px}
+.wst{font-family:var(--disp);font-size:10px;letter-spacing:.18em;text-transform:uppercase;
+  color:var(--red);border-bottom:1px solid var(--rule);padding-bottom:3px;margin-bottom:6px}
+.brow{display:grid;grid-template-columns:118px 1fr 62px;gap:7px;align-items:center;
+  font-size:11px;margin-bottom:3px}
+.bl{color:var(--ink2);overflow:hidden;white-space:nowrap;text-overflow:ellipsis}
+.bt{height:9px;background:var(--paper2);border:1px solid var(--rule);position:relative}
+.bt i{display:block;height:100%}
+.bv{font-family:var(--mono);font-size:10px;text-align:right}
+
+/* veil */
+#veil{position:fixed;inset:0;background:rgba(233,229,212,.92);display:none;
+  align-items:center;justify-content:center;z-index:50;flex-direction:column;gap:14px}
+#veil.show{display:flex}
+#veiltext{font-family:var(--disp);font-size:15px;letter-spacing:.12em;text-transform:uppercase}
+.spin{width:38px;height:38px;border:3px solid var(--rule);border-top-color:var(--red);
+  border-radius:50%;animation:sp 1s linear infinite}
+@keyframes sp{to{transform:rotate(360deg)}}
+@media(prefers-reduced-motion:reduce){.spin{animation:none}}
+
+/* methodology dialog */
+dialog{max-width:720px;width:92vw;max-height:86vh;border:2px solid var(--ink);
+  background:var(--paper);padding:0}
+dialog::backdrop{background:rgba(38,50,60,.4)}
+#methin{padding:22px 28px;overflow-y:auto;max-height:calc(86vh - 4px)}
+#methin h2{font-family:var(--disp);letter-spacing:.08em;font-size:19px;margin-bottom:4px}
+#methin h3{font-family:var(--disp);font-size:13px;letter-spacing:.1em;text-transform:uppercase;
+  color:var(--red);margin:16px 0 5px}
+#methin p{font-size:13px;line-height:1.55;margin-bottom:8px}
+#methClose{float:right;margin:10px;background:none;border:1px solid var(--ink);
+  padding:4px 12px;cursor:pointer}
+:focus-visible{outline:2px solid var(--red);outline-offset:1px}
+.glyphbox{display:inline-block;min-width:13px;text-align:center;border:1.4px solid #20242c;border-radius:3px;background:#fdfcf7;color:#20242c;font-weight:700;font-size:9.5px;line-height:12px;padding:0 1px;vertical-align:-1px}
+select:disabled,input:disabled{opacity:0.35;filter:grayscale(0.8)}
+</style>
+</head>
+<body>
+<header>
+  <div>
+    <div class="tb-eyebrow">English Region Generator</div>
+    <h1 id="sheetName">, </h1>
+  </div>
+  <div class="tb-sub" id="sheetSub"></div>
+  <div class="spacer"></div>
+  <button id="methBtn">Methodology</button>
+</header>
+<main>
+  <aside id="rail">
+    <div class="railhead">Survey parameters</div>
+    <div class="ctl"><label for="region">English region</label>
+      <select id="region">
+        <option value="north-east">North East</option>
+        <option value="north-west">North West</option>
+        <option value="yorkshire" selected>Yorkshire &amp; the Humber</option>
+        <option value="east-midlands">East Midlands</option>
+        <option value="west-midlands">West Midlands</option>
+        <option value="east">East of England</option>
+        <option value="south-east">South East</option>
+        <option value="south-west">South West</option>
+      </select></div>
+    <div class="ctl"><label for="size">Town size</label>
+      <select id="size">
+        <option value="small">Small (~50,000)</option>
+        <option value="medium" selected>Medium (~100,000)</option>
+        <option value="large">Large (~200,000)</option>
+      </select></div>
+    <div class="ctl"><label>Map edges (N E S W)</label>
+      <div class="edges">
+        <select id="eN"><option value="flat">N flat</option><option value="mountains">N hills</option><option value="sea">N sea</option></select>
+        <select id="eE"><option value="flat">E flat</option><option value="mountains">E hills</option><option value="sea" selected>E sea</option></select>
+        <select id="eS"><option value="flat">S flat</option><option value="mountains">S hills</option><option value="sea">S sea</option></select>
+        <select id="eW"><option value="flat">W flat</option><option value="mountains" selected>W hills</option><option value="sea">W sea</option></select>
+      </div></div>
+    <div class="ctl"><label for="river">Major river</label>
+      <select id="river">
+        <option value="none">None</option>
+        <option value="W-E" selected>West → East</option>
+        <option value="E-W">East → West</option>
+        <option value="N-S">North → South</option>
+        <option value="S-N">South → North</option>
+        <option value="N-E">North → East</option>
+        <option value="W-S">West → South</option>
+      </select></div>
+    <div class="ctl"><label for="river2">Second river</label>
+      <select id="river2">
+        <option value="none" selected>None</option>
+        <option value="N-S">North → South</option>
+        <option value="S-E">South → East</option>
+        <option value="N-E">North → East</option>
+        <option value="W-S">West → South</option>
+      </select></div>
+    <div class="ctl" style="display:flex;gap:7px;align-items:center">
+      <input type="checkbox" id="surprise" style="width:auto">
+      <label for="surprise" style="margin:0;text-transform:none;font-size:11.5px;letter-spacing:.02em">Surprise geography</label></div>
+    <div class="ctl"><label for="name">Town name (blank = generate)</label>
+      <input id="name" placeholder="e.g. Alderford" maxlength="28"></div>
+    <div class="ctl"><label for="seed">Seed</label>
+      <div class="seedrow"><input id="seed" value="pennine-7"><button id="dice" title="Random seed">⚄</button></div></div>
+    <button id="go">Survey a new region</button>
+    <div class="railhead">Lenses</div>
+    <label style="display:flex;align-items:center;gap:5px;font-size:10.5px;margin:2px 0 4px;cursor:pointer"><input type="checkbox" id="boundsToggle" style="width:auto">Ward boundaries</label><label style="display:flex;align-items:center;gap:5px;font-size:10.5px;margin:2px 0;cursor:pointer"><input type="checkbox" id="togRoads" checked style="width:auto">Roads</label><label style="display:flex;align-items:center;gap:5px;font-size:10.5px;margin:2px 0;cursor:pointer"><input type="checkbox" id="togRail" checked style="width:auto">Railways</label><label style="display:flex;align-items:center;gap:5px;font-size:10.5px;margin:2px 0;cursor:pointer"><input type="checkbox" id="togRivers" checked style="width:auto">Rivers</label><label style="display:flex;align-items:center;gap:5px;font-size:10.5px;margin:2px 0 4px;cursor:pointer"><input type="checkbox" id="togMarks" checked style="width:auto">Map symbols</label><div id="lenses"></div>
+  </aside>
+
+  <section id="sheet">
+    <div id="frame">
+      <div class="gridrefs gr-top"><span>A</span><span>B</span><span>C</span><span>D</span><span>E</span><span>F</span><span>G</span><span>H</span><span>J</span><span>K</span></div>
+      <div class="gridrefs gr-bot"><span>A</span><span>B</span><span>C</span><span>D</span><span>E</span><span>F</span><span>G</span><span>H</span><span>J</span><span>K</span></div>
+      <div class="gridrefs gr-l"><span>0</span><span>1</span><span>2</span><span>3</span><span>4</span><span>5</span><span>6</span><span>7</span><span>8</span><span>9</span></div>
+      <div class="gridrefs gr-r"><span>0</span><span>1</span><span>2</span><span>3</span><span>4</span><span>5</span><span>6</span><span>7</span><span>8</span><span>9</span></div>
+      <div id="mapbox"><canvas id="map"></canvas>
+        <div id="maplegend"><div id="legend"></div></div>
+        <div id="zoomui">
+          <button id="zin" title="Zoom in">+</button>
+          <button id="zout" title="Zoom out">−</button>
+          <button id="zfit" title="Fit sheet">⌂</button>
+        </div>
+      </div>
+      <div id="readout">, </div>
+      <div id="scalebar"></div>
+    </div>
+  </section>
+
+  <aside id="right">
+    <div id="ward">
+      <div id="whead">
+        <div><div id="wname"></div><div id="wvotes" style="font-size:10px;margin:2px 0"></div><div id="wkind"></div></div>
+        <button id="wclose" aria-label="Close">✕</button>
+      </div>
+      <div id="wbody"></div>
+    </div>
+    <div id="countyInfo">
+    <div class="railhead" style="margin-top:0">County account</div>
+    <p id="story"></p>
+    <div class="railhead">Key statistics</div>
+    <div id="facts"></div>
+
+    <div style="margin:8px 0 14px;display:flex;gap:6px">
+      <button id="exportBtn" class="btn2">Export manifest</button><button id="csvBtn" class="ghost" style="margin-left:6px">District CSV</button>
+      <button id="importBtn" class="btn2">Import</button>
+      <input type="file" id="importFile" accept="application/json" style="display:none">
+    </div>
+    <div class="railhead">Economy</div>
+    <div id="econ"></div>
+    </div>
+
+  </aside>
+</main>
+
+<div id="veil"><div class="spin"></div><div id="veiltext">Surveying…</div><button id="cancelGen" style="margin-top:10px;font-size:11px;padding:3px 12px;display:none">Cancel</button></div>
+
+<dialog id="meth">
+  <button id="methClose">Close</button>
+  <div id="methin">
+    <h2>Methodology &amp; model assumptions</h2>
+        <h3>Geology &amp; terrain</h3>
+    <p>Each region carries a simplified but real stratigraphic stack (Coal Measures and Magnesian
+    Limestone in the North East; gritstone and Coal Measures in the Pennine regions; chalk, boulder
+    clay and fen in the East; the Weald sequence in the South East; granite and Devonian slate in
+    the South West). Strata are projected along a regional dip; relief comes from differential
+    erosion of those units. The geology is three-dimensional: a folded, faulted,
+    sometimes domed structural surface carries a stratigraphic column of formation thicknesses,
+    and the outcrop anywhere is the formation found where today's land surface intersects that
+    column. Valleys therefore cut down to older rocks (inliers), resistant caps survive on
+    hills, and outcrop boundaries make V-patterns across valleys, exactly as on a real
+    geological sheet. Relief and outcrop are co-evolved through differential-erosion passes,
+    so scarps and vales emerge from the resistance feedback rather than being stamped on. Massif fronts are lobed
+    with spur ridges; in the three northern regions, glacial dales with U-shaped cross-profiles
+    are carved radially from the upland and the drainage then finds them. Coastlines are
+    erosion-controlled: bays bite into soft strata and resistant rock stands out as headlands,
+    which is also why an all-sea "island" sheet comes out as an irregular massif rather than a
+    square. Drainage is derived by priority-flood depression filling and D8 flow accumulation
+    over an orographic rainfall field; requested rivers carry an implied off-map catchment so
+    they always run.</p>
+    <h3>Settlement &amp; names</h3>
+    <p>The main town is sited the way English towns actually were: at the lowest bridging point of
+    the major river, at a sheltered harbour, or on a dry spring-line site, with an origin story
+    (Roman fort, minster, burh, Norman plantation) that constrains its name. Place names are
+    assembled from Old English, Old Norse, Brittonic and Norman elements with regionally correct
+    frequencies (−by/−thorpe in the Danelaw, −combe and Tre−/Pen− in the South West), and suffixes
+    conditioned on the site (−ford at crossings, −mouth at estuaries). River names use Brittonic
+    roots, as most real English river names do.</p>
+    <h3>Growth</h3>
+    <p>The town is grown era by era, and not as concentric rings: each settlement carries
+    persistent Hoyt-style sector preferences, so growth runs out in wedges; Victorian industry
+    goes to flat land by water and rail on the <em>north-eastern</em>, downwind side (the
+    prevailing wind is south-westerly, which is why English west ends are the nice ends);
+    terraces pack around the works and villas take the upwind hills. Interwar semis ribbon
+    hard along the arterial roads; a green belt is designated around the main town in the 1950s,
+    so post-war estates leapfrog it; late-century cul-de-sacs pull toward the motorway junction;
+    the 2000s add centre flats and dockside conversion. Roads are routed over a cost surface with
+    field-scale noise, so they wander the way enclosure-era lanes do, and every settlement is
+    knitted into a lane web; railways are routed at ruling gradients before the motorway exists,
+    and a share of branches close in the 1960s and persist as green corridors. Zoom in on any
+    built-up area for era-conditioned street grain: tangled medieval cores, gridded Victorian
+    terraces, curling estates.</p>
+    <h3>Streets and people</h3>
+    <p>Streets are the growth medium, not decoration: each era first extends a settlement's
+    street graph with era-specific geometry (organic medieval lanes, bye-law grids snapped to
+    the main-road bearing, curving C20 suburbs), and only land served by a street becomes
+    developable, so the drawn network is the structure the town actually grew on (99% of the
+    housing stock ends street-served). The population is a household-level microsimulation:
+    roughly one household per 2.3 residents is synthesized into the stock, with a socio-economic
+    segment drawn from the housing it occupies and an ethnicity drawn from regional census-style
+    priors. Where groups end up living is then NOT painted: a few rounds of residential choice
+    with a chain-migration preference (the mechanism behind real English ethnic geography)
+    produce emergent clustering, calibrated so a Pennine textile borough develops inner wards
+    around 40-55% single-community, as the census shows, while a rural county stays dispersed.
+    Every working household is matched to actual sector-resolved jobs by segment preference and
+    distance decay, and the commuting matrix the traffic model loads is the aggregate of those
+    real matches. Ward statistics are aggregations of this simulated population.</p>
+    <h3>Wards</h3>
+    <p>Ward boundaries are grown by a barrier-weighted geodesic flood from urban seeds and parish
+    centres: rivers, railway lines and main roads are expensive to cross, so boundaries snap onto
+    them, as real English ward boundaries do. Urban wards target ~5,000 residents; each ward also
+    carries an idiosyncratic small-area term, because adjacent real wards differ more than any
+    smooth model predicts.</p>
+    <h3>Economy</h3>
+    <p>Every job is allocated to one of ten sectors from its land use. Contiguous industrial and
+    commercial clusters become named firms with period- and region-appropriate names and founding
+    dates (worsted mills and rolling mills where the geology says coal and wool; science parks by
+    the late-century campus), with peak-employment figures for the old staples. The borough also
+    gets its institutional roster: cathedral or minster where earned, universities, the NHS
+    trust, a football club at a plausible league tier, a newspaper, market day, reservoir, sewage
+    works, all consistent with what the growth model actually built.</p>
+    <p>The labour market closes as an accounting identity: resident workers split into internal
+    and outbound commuters, local jobs into internal and inbound, with the two margins sharing
+    the internal term, so residents equal internal plus outbound and jobs equal internal plus
+    inbound exactly. Workplace capacity is a hard constraint in the match; a worker who finds
+    no cell with headroom commutes out. The inbound flow is sized to the residual jobs
+    (about a quarter, as in real English boroughs), and both inbound and outbound movements
+    are routed through the sheet-edge gateways in the traffic assignment. Primary-school
+    provision responds to the modelled roll: sites are added in the most child-heavy districts
+    until planned capacity covers the roll with a 17% surplus, matching England’s roughly 10–15% spare places plus bulge headroom; persistent local overflow triggers additional provision, and children assign to the
+    nearest school with places.</p>
+    <h3>Demography</h3>
+    <p>Ward profiles are derived from the housing stock the growth model actually built, seeded
+    with 2021-census-calibrated regional priors. Minority communities concentrate in inner
+    Victorian terraces near former industry (South Asian communities in the Pennine textile belt,
+    Indian communities in Midlands manufacturing towns), student belts and centre flats; outer
+    estates and villages run whiter than the borough average. Deprivation, tenure, unemployment,
+    car ownership and degree share co-vary with the stock; life expectancy applies the real
+    English IMD gradient (~8–9 years for men across deciles) to regional baselines.</p>
+    <h3>Traffic &amp; environment</h3>
+    <p>The origin-destination matrix is aggregated from the actual household-to-job matches of
+    the microsimulation, with car availability by segment and ward. Assignment is by congested
+    shortest paths with the BPR volume-delay function, iterated; a v/c above 1 on an inner link
+    should be read as queueing demand. Rail loading comes from station catchments against a
+    typical peak seat supply. Crime is generated per ward from the emerged composition
+    (unemployment, affluence, night-time economy, students), scaled to the England average of
+    roughly 85 police-recorded offences per 1,000 residents per year. NO₂ is background + urban increment + a traffic
+    kernel (the dominant term in English monitoring data) with industrial plumes trending
+    north-east; noise is an Lden-style proxy from roads, rail and industry; biodiversity scores
+    habitats in a UK style, where estuary, marsh, old woodland and reclaimed colliery spoil
+    score high, and improved arable scores low.</p>
+    <h3>External traffic</h3>
+    <p>The network is not closed to the sheet: every classified road reaching the edge is a
+    gateway. Roughly a quarter of the borough's jobs are filled by in-commuters entering through
+    those gateways (capped at each gateway's approach capacity), and strategic through-movements
+    run between motorway and trunk gateways, so the motorway and radial A-roads carry traffic that
+    has nothing to do with the town, as they do in reality. Each ward records where its own
+    workers actually end up, shown in its profile.</p>
+    <h3>Biodiversity</h3>
+    <p>Habitat value is set by land cover and use, then modified by landscape configuration:
+    riparian buffers along watercourses, hedgerow field margins in the farmed matrix, woodland
+    interior versus edge, and a connectivity term so isolated green in a built-up matrix scores
+    below the same habitat embedded in a green network. The best-connected patches are promoted to
+    named designations at County Wildlife Site, Local Nature Reserve or SSSI tier by area.</p>
+    <h3>Public transport &amp; cycling</h3>
+    <p>Bus provision is modelled at ward level as buses per hour, following density and
+    position on the radial classified corridors; high provision suppresses car commuting in the
+    mode model. Cycle-to-work share follows the census pattern: ~3% nationally, rising with
+    flat terrain and student population.</p>
+    <h3>Calibration &amp; validation</h3>
+    <p>Large-city ethnic composition is additionally anchored to published Census 2021
+    metropolitan-borough figures, solved in person space so that census-true differences in
+    household size and age structure between groups do not bias the realized shares; verified
+    mean absolute error against the regional anchors is under 2 percentage points.</p>
+    <p>The raw authority table, the deterministic train/holdout split, the 19-to-10 group
+    concordance and the fitting script ship alongside this file in the calibration bundle, so
+    the headline figures below can be re-derived independently.</p>
+    <p>Most model constants are hand-tuned so that batches of generated counties roughly match
+    published England aggregates (ONS workplace employment, GVA by sector, census travel-to-work,
+    police.uk ward crime rates, the ONS life-expectancy gradient). That is plausibility tuning,
+    not statistical calibration, and every indicator on the sheet should be read as a modelled
+    index for a fictional place.</p>
+    <p>One family of outputs is statistically fitted: district ethnic composition. The
+    region-and-class priors are fitted to ONS Census 2021 ethnic-group profiles (TS021, 19+1
+    classification, aggregated here to ten groups) for 23 English local authorities, split
+    deterministically by authority code into 14 training and 9 holdout authorities. Against the
+    holdout, generated borough compositions show a mean absolute error of 1.6 percentage points
+    per group, and real values fall within the 3-seed ensemble envelope for 69% of group-cells.
+    Caveats, stated plainly: one model defect was diagnosed by inspecting holdout errors, so the
+    holdout is not perfectly clean and these are best read as development-set scores; the
+    reference sample is 23 of 331 authorities, with no London boroughs and only one mill town,
+    so high-diversity cities are under-generated (synthetic ~73% White British where a
+    Nottingham-class city is nearer 57%); and the fit covers this one variable family, not the
+    full multivariate programme. Cells with no region-class example use nationally pooled
+    priors.</p>
+    <p>Typical measured outputs across a generated batch, for orientation: mean home-work
+    separation ~5.8 km straight-line; commuting car share ~55% (census: ~60% outside London);
+    urban male life-expectancy span ~8 years (ONS decile gradient: 7-10); ward crime rates
+    ~50-160 per 1,000 (police.uk: ~40-200); peak single-community ward shares of 35-45% in
+    textile regions, as in Bradford or Blackburn.</p>
+<h3>Limitations</h3>
+    <p>A specialist would recognise simplifications at every stage. The advertised price-to-composition coupling is a single post-hoc
+    affordability adjustment applied after households are settled; it does not move households
+    or feed back into demographics, income, tenure or voting. Hydrology is D8 flow on a
+    coarse grid, recomputed in full after estuary widening converts land to tidal water so
+    the network drains to the final coastline. Traffic runs a short method-of-successive-averages loop, not a solved
+    equilibrium; on hard networks it can fail to converge, and the diagnostics say so rather
+    than pretending otherwise. Pollution is a kernel proxy, not dispersion modelling.
+    The street network is a mid-scale growth skeleton, routable by the traffic model but not
+    parcel-faithful; there is no block subdivision or cul-de-sac plan. Households are a settled
+    cross-section with no lifecycle: no births, deaths or moves through time. The claim
+    throughout is not precision but that the couplings (geology to industry to housing to
+    travel to health) run in the right direction with roughly the right magnitudes.</p>
+    <h3>References</h3>
+    <p style="font-size:11px;line-height:1.5">
+    ONS, Census 2021, Ethnic group (TS021), local authority tables via the Ethnicity Facts and
+    Figures service, retrieved 18 July 2026 (calibration and holdout data).<br>
+    Barnes, Lehman and Mulla (2014), Priority-Flood: an optimal depression-filling and
+    watershed-labeling algorithm, Computers &amp; Geosciences 62 (drainage preprocessing).<br>
+    O'Callaghan and Mark (1984), The extraction of drainage networks from digital elevation
+    data, CVGIP 28 (D8 flow routing).<br>
+    Wardrop (1952), Some theoretical aspects of road traffic research, Proc. ICE (equilibrium
+    concept); Bureau of Public Roads (1964) volume-delay function; assignment by the method of
+    successive averages.<br>
+    Department for Transport, National Travel Survey 2024 (trip-rate and mode-share
+    magnitudes).<br>
+    MHCLG, English Indices of Deprivation (concept for the deprivation index; the synthetic
+    index is not the official IMD).<br>
+    Zipf (1949) rank-size regularity for the settlement hierarchy.<br>
+    Historic England, Historic Landscape Characterisation programme (field-system and
+    enclosure patterning).<br>
+    Choupani and Mamdoohi (2016), Population synthesis using iterative proportional fitting,
+    Transportation Research Procedia, doi:10.1016/j.trpro.2016.11.078 (population-synthesis
+    background).<br>
+    Boeing (2017), OSMnx: new methods for street networks, CEUS 65,
+    doi:10.1016/j.compenvurbsys.2017.05.004 (network-metric concepts).<br>
+    ONS, Census 2021 built-up-area characteristics, ons.gov.uk (settlement-size context).<br>
+    Ethnicity Facts and Figures service:
+    ethnicity-facts-figures.service.gov.uk/uk-population-by-ethnicity (source CSVs).<br>
+    Priority-Flood: doi:10.1016/j.cageo.2013.04.024. National Travel Survey 2024:
+    gov.uk/government/statistics/national-travel-survey-2024. English Indices of Deprivation:
+    gov.uk/government/collections/english-indices-of-deprivation. Historic Landscape
+    Characterisation: historicengland.org.uk/research/methods/characterisation.</p>
+  </div>
+</dialog>
+
+<script>
+/*__BUNDLE__*/
+</script>
+</body>
+</html>
