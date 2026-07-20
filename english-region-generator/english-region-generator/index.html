@@ -3,7 +3,16 @@
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width,initial-scale=1">
-<title>English Region Generator</title>
+<title>English Region Generator | David Freeborn</title>
+<meta name="description" content="A procedural simulator of imaginary English regions, rendered as an interactive Ordnance Survey style map with analytical lenses for terrain, settlement, economy, traffic, and politics." />
+<link rel="canonical" href="https://www.davidpeterwallisfreeborn.com/fun/english-region-generator/" />
+<meta property="og:title" content="English Region Generator" />
+<meta property="og:description" content="A procedural simulator of imaginary English regions, rendered as an interactive Ordnance Survey style map with analytical lenses for terrain, settlement, economy, traffic, and politics." />
+<meta property="og:url" content="https://www.davidpeterwallisfreeborn.com/fun/english-region-generator/" />
+<meta property="og:type" content="website" />
+<meta name="twitter:card" content="summary" />
+<meta name="twitter:title" content="English Region Generator" />
+<meta name="twitter:description" content="A procedural simulator of imaginary English regions with terrain, settlement, economy, traffic, and political analysis." />
 <style>
 :root{
   --paper:#f1eee1; --paper2:#e9e5d4; --panel:#ece8d9; --ink:#26323c; --ink2:#5a6672;
@@ -1995,7 +2004,7 @@ function makeRouter(world){
     const h=(i)=>{const x=i%N,y=(i/N)|0;return dist(x,y,bx,by);};
     const rr=world.roadRaster;
     function cellCost(i){
-      if(sea[i]) return mode==="rail"&&opts.coastOk?60:1e6;
+      if(sea[i]) return mode==="rail"&&opts.coastOk?60:Infinity;   // open water is a wall, not a toll
       const sl=slope[i];
       let c=1;
       // organic deviation: motorways engineered straighter, lanes wander most
@@ -2068,6 +2077,22 @@ function chaikin(pts,iters){
   return p;
 }
 
+/* concatenated alignments (motorway halves, ring segments) can double
+   back on themselves where the legs meet: excise any short loop where
+   the path revisits a cell it passed within the last ~45 steps */
+function pruneLoops(pts){
+  const seen=new Map();const out=[];
+  for(const p of pts){
+    const k=Math.round(p[0])+","+Math.round(p[1]);
+    const prev=seen.get(k);
+    if(prev!==undefined&&out.length-prev<=45&&out.length-prev>=2){
+      for(let j=prev+1;j<out.length;j++)seen.delete(Math.round(out[j][0])+","+Math.round(out[j][1]));
+      out.length=prev+1;
+    }else{seen.set(k,out.length);out.push(p);}
+  }
+  return out;
+}
+
 function stampRoad(world,pts,cls){
   const {N}=world;const idx=(x,y)=>y*N+x;
   for(const[x,y]of pts){const i=idx(x,y);if(world.roadRaster[i]<cls)world.roadRaster[i]=cls;}
@@ -2099,9 +2124,18 @@ function buildHistoricRoads(world){
   // Roman road: two straight-ish legs through the town, border to border
   if(main.origin==="roman"){
     const th=rng.range(0,Math.PI);
-    const far=N*1.5;
-    const ends=[[main.x+Math.cos(th)*far,main.y+Math.sin(th)*far],[main.x-Math.cos(th)*far,main.y-Math.sin(th)*far]]
-      .map(([x,y])=>[clamp(Math.round(x),1,N-2),clamp(Math.round(y),1,N-2)]);
+    /* each leg's end is walked inward from the border until it stands on
+       land; a leg whose whole bearing lies over the sea is dropped (the
+       road went to a port that is off this sheet) */
+    const romanEnd=(sign)=>{
+      for(let t=1.5;t>0.2;t-=0.02){
+        const x=clamp(Math.round(main.x+sign*Math.cos(th)*N*t),1,N-2);
+        const y=clamp(Math.round(main.y+sign*Math.sin(th)*N*t),1,N-2);
+        if(!world.sea[y*N+x])return [x,y];
+      }
+      return null;
+    };
+    const ends=[romanEnd(1),romanEnd(-1)].filter(Boolean);
     for(const[ex,ey]of ends){
       // clip to border by walking from town outward: route to clamped end
       const p=route(main.x,main.y,ex,ey,"roman");
@@ -2141,11 +2175,51 @@ function buildHistoricRoads(world){
     .filter(([sd])=>world.edges[sd]!=="sea")            // no road runs into the sea
     .map(([,x2,y2])=>[x2,y2]);
   let exits=0;
+  const exitCap=Math.min(Math.max(1,edgesPts.length),world.rng.chance(0.55)?3:2);
   for(const[ex,ey]of world.rng.shuffle(edgesPts.slice())){
-    if(exits>=2)break;
+    if(exits>=exitCap)break;
     const i=ey*N+ex; if(world.sea[i])continue;
     const p=route(main.x,main.y,ex,ey,"road");
     if(p){world.roads.push({cls:"A",pts:p,name:roadNumber(world,exits===0),era:"turnpike"});stampRoad(world,p,ROADCLASS.A);exits++;}
+  }
+
+  /* -------- classified roads continue beyond the sheet --------
+     A road that ends at a town near the survey edge did not, in
+     reality, end there: it carried on to the next county. Extend such
+     ends outward on their own bearing, usually but not always (a few
+     genuine termini survive). */
+  {
+    const extended=new Set();
+    for(const r of world.roads){
+      if(!["A","B"].includes(r.cls)||r.roman||r.era==="turnpike")continue;
+      for(const endIdx of [0,r.pts.length-1]){
+        const p2=r.pts[endIdx];
+        const eDist=Math.min(p2[0],p2[1],N-1-p2[0],N-1-p2[1]);
+        if(eDist<5||eDist>N*0.30)continue;               // already there, or deep inland
+        const tk=Math.round(p2[0]/3)+","+Math.round(p2[1]/3);
+        if(extended.has(tk))continue;                     // one continuation per place
+        if(!rng.chance(0.65))continue;                    // NOT always: some roads do end
+        const q=r.pts[endIdx===0?Math.min(6,r.pts.length-1):Math.max(0,r.pts.length-7)];
+        let hx=p2[0]-q[0],hy=p2[1]-q[1];const L2=Math.hypot(hx,hy)||1;hx/=L2;hy/=L2;
+        // walk the bearing to the border; give up if it runs into the sea
+        let tx=-1,ty=-1;
+        for(let t=1;t<N;t++){
+          const X=Math.round(p2[0]+hx*t),Y=Math.round(p2[1]+hy*t);
+          if(X<1||Y<1||X>N-2||Y>N-2){tx=clamp(X,1,N-2);ty=clamp(Y,1,N-2);break;}
+          if(world.sea[Y*N+X]){tx=-1;break;}
+          tx=X;ty=Y;
+        }
+        if(tx<0)continue;
+        if(Math.min(tx,ty,N-1-tx,N-1-ty)>3)continue;      // bearing never reached the edge
+        const ext=route(p2[0],p2[1],tx,ty,"road");
+        if(ext&&ext.length>3){
+          extended.add(tk);
+          if(endIdx===0)r.pts=ext.slice().reverse().concat(r.pts);
+          else r.pts=r.pts.concat(ext.slice(1));
+          stampRoad(world,ext,ROADCLASS[r.cls]);
+        }
+      }
+    }
   }
 
 
@@ -2323,17 +2397,26 @@ function buildMotorway(world){
   else{
     world.motorway=null;
     const offs=6/world.cellKm;
-    for(let attempt=0;attempt<10&&!world.motorway;attempt++){
+    for(let attempt=0;attempt<14&&!world.motorway;attempt++){
       const dirTheta=rng.range(0,Math.PI);
       const nx=Math.cos(dirTheta+Math.PI/2),ny=Math.sin(dirTheta+Math.PI/2);
       const cx=clamp(main.x+nx*offs,10,N-10),cy=clamp(main.y+ny*offs,10,N-10);
       if(world.sea[idx(Math.round(cx),Math.round(cy))])continue;
-      // walk each end inward from the border until it is on land
+      /* walk each end inward from the border until it is on land. A
+         motorway is a THROUGH route: an end that comes to rest well
+         inside the sheet (because the bearing points out to sea) is a
+         failed attempt, and the direction is re-drawn; only after the
+         strict attempts are exhausted is a coastal terminus accepted
+         (heavily marine counties may have no border-to-border corridor). */
+      const strict=attempt<8;
       const endAt=sign=>{
         for(let t=1;t>0.25;t-=0.03){
-          const x=clamp(Math.round(cx+sign*Math.cos(dirTheta)*N*t),2,N-3);
-          const y=clamp(Math.round(cy+sign*Math.sin(dirTheta)*N*t),2,N-3);
-          if(!world.sea[idx(x,y)])return [x,y];
+          const x=clamp(Math.round(cx+sign*Math.cos(dirTheta)*N*t),1,N-2);
+          const y=clamp(Math.round(cy+sign*Math.sin(dirTheta)*N*t),1,N-2);
+          if(!world.sea[idx(x,y)]){
+            if(strict&&Math.min(x,y,N-1-x,N-1-y)>5)return null;
+            return [x,y];
+          }
         }
         return null;
       };
@@ -2342,7 +2425,7 @@ function buildMotorway(world){
       const p1=route(a[0],a[1],Math.round(cx),Math.round(cy),"motorway");
       const p2=route(Math.round(cx),Math.round(cy),b[0],b[1],"motorway");
       if(p1&&p2){
-        const pts=p1.concat(p2.slice(1));
+        const pts=pruneLoops(p1.concat(p2.slice(1)));
         world.motorway={pts,name:motorwayNumber(world)};
         world.roads.push({cls:"motorway",pts,name:world.motorway.name,era:"postwar"});
         stampRoad(world,pts,ROADCLASS.motorway);
@@ -2398,7 +2481,7 @@ function buildMotorway(world){
       const p=route(segs[k][0],segs[k][1],segs[k+1][0],segs[k+1][1],"motorway");
       if(p)ring=ring.concat(k===0?p:p.slice(1));
     }
-    if(ring.length>8){world.roads.push({cls:"Adual",pts:ring,name:roadNumber(world,false),era:"postwar",ring:true});stampRoad(world,ring,ROADCLASS.Adual);}
+    if(ring.length>8){ring=pruneLoops(ring);world.roads.push({cls:"Adual",pts:ring,name:roadNumber(world,false),era:"postwar",ring:true});stampRoad(world,ring,ROADCLASS.Adual);}
   }
 }
 
@@ -6492,58 +6575,93 @@ function generate(params){
       const amp=noM?0:r.cls==="B"?0.05:0.22;
       r.draw=chaikin(amp>0?meander(r.pts,amp,r.cls==="lane"?3.2:4.5):r.pts,2);
     }
+    const owner=new Map();   // cell -> displaced [x,y] on the chain that drew it (global across rivers)
     for(const rv of world.rivers){
       /* r.cells is a tributary TREE, not a path: rebuild real chains by
-         walking flowTo from each source; joins run 2 cells into the
-         receiving stem so confluences draw smoothly */
+         walking flowTo from each source. Meander is applied to each
+         WHOLE chain (not per width-class run: independently phased
+         runs used to shear apart at class boundaries), the longest
+         chain is displaced first and owns the shared stem, and every
+         tributary's tail is pinned to the stem's DISPLACED position at
+         the confluence, so joins land on the water they join. */
       const inSet=new Set(rv.cells);
       const hasUp=new Set();
       for(const c of rv.cells){const j2=world.flowTo[c];if(inSet.has(j2))hasUp.add(j2);}
-      const visited=new Set();
       rv.drawRuns=[];
       const sources=rv.cells.filter(c=>!hasUp.has(c));
+      const rawChains=[];
       for(const s0 of sources){
-        const path=[];let c=s0,g=0,joinTail=0;
+        const full=[];let c=s0,g=0;
         while(g++<5000){
-          path.push(c);
-          if(visited.has(c)){joinTail++;if(joinTail>2)break;}
-          else visited.add(c);
+          full.push(c);
           const j2=world.flowTo[c];
           if(j2<0||!inSet.has(j2))break;   // stop on the last land cell
           c=j2;
         }
+        if(full.length>=3)rawChains.push(full);
+      }
+      rawChains.sort((q,w)=>w.length-q.length);   // mainstem first
+      for(const full of rawChains){
+        // cut at the join: run 2 cells into the already-drawn stem
+        const path=[];let joinTail=0;
+        for(const c of full){
+          path.push(c);
+          if(owner.has(c)){joinTail++;if(joinTail>2)break;}
+        }
         if(path.length<3)continue;
-        // split into class runs so width steps downstream
+        let pts=path.map(cc=>[cc%N,(cc/N)|0]);
+        // chain-level sinuosity: straight lowland reaches swing more
+        const a2=pts[0],b2=pts[pts.length-1];
+        const chord=Math.hypot(b2[0]-a2[0],b2[1]-a2[1]);
+        const straightness=pts.length>6?chord/(pts.length-1):0;
+        let amp=Math.min(0.85,0.22+Math.max(1,world.river[path[Math.floor(path.length/2)]]||1)*0.17);
+        let wl=3.0;
+        if(straightness>0.8){amp=Math.min(1.5,0.45+pts.length*0.03);wl=6+jr.f()*5;}
+        if(pts.length>20){
+          const ampL=Math.min(2.6,pts.length*0.055)*Math.max(0.35,straightness);
+          pts=meander(pts,ampL,20+jr.f()*16);
+        }
+        pts=meander(pts,amp,wl);
+        /* pin the tail: points on the owned stem take the stem's
+           displaced coordinates exactly, and the approach is eased in
+           by translating the last few free points toward the junction's
+           displacement, so the tributary lands ON the drawn stem */
+        let firstOwned=-1;
+        for(let k2=0;k2<path.length;k2++)if(owner.has(path[k2])){firstOwned=k2;break;}
+        if(firstOwned>=0){
+          const dJ=owner.get(path[firstOwned]);
+          const raw=[path[firstOwned]%N,(path[firstOwned]/N)|0];
+          const dx2=dJ[0]-raw[0],dy2=dJ[1]-raw[1];
+          for(let b3=1;b3<=4;b3++){
+            const q2=firstOwned-b3;if(q2<0)break;
+            const w2=1-b3/5;
+            pts[q2]=[pts[q2][0]+dx2*w2,pts[q2][1]+dy2*w2];
+          }
+          for(let k2=firstOwned;k2<path.length;k2++){
+            const d2=owner.get(path[k2]);
+            if(d2)pts[k2]=[d2[0],d2[1]];
+          }
+        }
+        for(let k2=0;k2<path.length;k2++)
+          if(!owner.has(path[k2]))owner.set(path[k2],pts[k2]);
+        // split the displaced chain into class runs so width steps downstream
         let run=null,cls0=-1;
-        for(const cc of path){
-          const cl=Math.max(1,world.river[cc]||1);
+        for(let k2=0;k2<path.length;k2++){
+          const cl=Math.max(1,world.river[path[k2]]||1);
           if(cl!==cls0){
             if(run&&run.pts.length>1)rv.drawRuns.push(run);
             run={cls:cl,pts:run?[run.pts[run.pts.length-1]]:[]};cls0=cl;
           }
-          run.pts.push([cc%N,(cc/N)|0]);
+          run.pts.push(pts[k2]);
         }
         if(run&&run.pts.length>1)rv.drawRuns.push(run);
       }
-      // estuary: the last reach before the sea broadens
+      // estuary flag, corner-cut, and coastline trim per run
       for(const rr of rv.drawRuns){
         const last=rr.pts[rr.pts.length-1];
         const li=Math.round(last[1])*N+Math.round(last[0]);
         rr.mouth=world.sea[li]?1:0;
-        let amp=Math.min(0.85,0.22+rr.cls*0.17);
-        // dead-straight reaches (flat lowland D8) get extra sinuosity
-        const a2=rr.pts[0],b2=rr.pts[rr.pts.length-1];
-        const chord=Math.hypot(b2[0]-a2[0],b2[1]-a2[1]);
-        const straightness=rr.pts.length>6?chord/(rr.pts.length-1):0;
-        let wl=3.0;
-        if(straightness>0.8){amp=Math.min(1.5,0.45+rr.pts.length*0.03);wl=6+jr.f()*5;}
-        // every long reach swings slowly off its trend, in proportion
-        // to how straight it runs; no threshold cliff
-        if(rr.pts.length>20){
-          const ampL=Math.min(2.6,rr.pts.length*0.055)*Math.max(0.35,straightness);
-          rr.pts=meander(rr.pts,ampL,20+jr.f()*16);
-        }
-        rr.pts=chaikin(meander(rr.pts,amp,wl),2);
+        rr.pts=chaikin(rr.pts,2);
         // smoothing can overshoot the coastline: trim to the last land point
         while(rr.pts.length>2){
           const q2=rr.pts[rr.pts.length-1];
@@ -7027,9 +7145,9 @@ function drawScene(cv,world,state){
     ctx.imageSmoothingEnabled=true;
   }
 
-  /* rivers */
+  /* rivers (toggle: showRivers) */
   ctx.lineCap="round";ctx.lineJoin="round";
-  for(const r of world.rivers){
+  for(const r of (state.showRivers===false?[]:world.rivers)){
     ctx.lineCap="round";ctx.lineJoin="round";
     if(r.drawRuns){
       const wBase=Math.min(1.6,Math.max(0.7,sc/4));
@@ -7418,32 +7536,39 @@ function esc(v){return String(v??"").replace(/[&<>"']/g,c=>({"&":"&amp;","<":"&l
    ============================================================ */
 
 const LENSES=[
+  // land: what the ground is
   ["map","Survey sheet","hypsometric tint with hillshade"],
   ["relief","Relief","elevation"],
   ["geology","Bedrock geology","formations and faults"],
   ["soil","Soils","series from geology and drainage"],
   ["flood","Flood risk","fluvial and coastal"],
+  ["bio","Biodiversity","habitat index"],
+  // built form: what stands on it
   ["landuse","Land use","detailed"],
   ["function","Urban function","broad classes"],
   ["era","Housing age","construction era"],
+  // people: who lives there
   ["density","Population density","persons per km²"],
   ["age","Median age","by district"],
   ["eth","Ethnicity","largest minority group"],
   ["degree","Degree educated","working-age share"],
+  // economy & outcomes
   ["income","Household income","median, by district"],
   ["price","House prices","median, by district"],
   ["gva","GVA per head","by district"],
   ["imd","Deprivation","decile, 1 most deprived"],
   ["crime","Crime","offences per 1,000"],
   ["le","Life expectancy","at birth, by district"],
-  ["transport","Transport","network and stations"],
-  ["access","Transport access","by district"],
+  // services
   ["schools","School places","pressure on primaries"],
   ["health","Hospital access","distance to acute care"],
+  // movement and its externalities
+  ["transport","Transport","network and stations"],
+  ["access","Transport access","by district"],
   ["traffic","Traffic","AM peak flows"],
   ["noise","Noise","Lden"],
   ["air","Air quality","NO2 annual mean"],
-  ["bio","Biodiversity","habitat index"],
+  // administration
   ["wards","Wards & parishes","administrative geography"],
   ["politics","Voting","modelled shares"],
 ];
@@ -7663,7 +7788,7 @@ function bootUI(){
   cv.addEventListener("mousemove",e=>{
     if(!APP.world||pan&&pan.moved)return;
     const [x,y]=toCell(e);
-    if(x<0||y<0||x>=APP.world.N||y>=APP.world.N){$("readout").textContent="—";return;}
+    if(x<0||y<0||x>=APP.world.N||y>=APP.world.N){$("readout").textContent="–";return;}
     updateReadout(x,y,e);
   });
 
@@ -7692,9 +7817,23 @@ function paramsFromUI(){
     const sides=["N","E","S","W"];
     for(const s2 of sides)$("e"+s2).value=["flat","flat","mountains","sea"][Math.floor(rng()*4)];
     if(![..."NESW"].some(s2=>$("e"+s2).value!=="sea"))$("eW").value="flat";
-    const pairs=[["W","E"],["N","S"],["N","E"],["W","S"],["S","E"],["E","W"]];
-    $("river").value=rng()<0.85?pairs[Math.floor(rng()*pairs.length)].join("-"):"none";
-    $("river2").value=rng()<0.3?["N-S","S-E","N-E","W-S"][Math.floor(rng()*4)]:"none";
+    /* rivers: only values the selects actually offer, and only pairs
+       consistent with the drawn edges: a river should not be asked to
+       LEAVE through a mountain wall, and if the county has a coast the
+       requested outlet should usually be a sea edge */
+    const edgeOf=s2=>$("e"+s2).value;
+    const pickRiver=(cands)=>{
+      let ok=cands.filter(p=>edgeOf(p[1])!=="mountains");
+      if(!ok.length)ok=cands;
+      const toSea=ok.filter(p=>edgeOf(p[1])==="sea");
+      if(toSea.length&&rng()<0.8)ok=toSea;
+      return ok[Math.floor(rng()*ok.length)].join("-");
+    };
+    const RIVER1=[["W","E"],["E","W"],["N","S"],["S","N"],["N","E"],["W","S"]];
+    const RIVER2=[["N","S"],["S","E"],["N","E"],["W","S"]];
+    $("river").value=rng()<0.85?pickRiver(RIVER1):"none";
+    $("river2").value=rng()<0.3?pickRiver(RIVER2):"none";
+    if($("river2").value===$("river").value)$("river2").value="none";
     $("surprise").checked=false;
     for(const id of ["eN","eE","eS","eW","river","river2"])$(id).disabled=false;
   }
@@ -7770,7 +7909,7 @@ function regenerate(){
     traffic:"counting the traffic",env:"surveying air and water"};
   wk.onmessage=(ev)=>{
     const m=ev.data;
-    if(m.type==="stage"){$("veiltext").textContent="Surveying "+nm2+" — "+(STAGE_LABEL[m.name]||m.name)+"…";return;}
+    if(m.type==="stage"){$("veiltext").textContent="Surveying "+nm2+" · "+(STAGE_LABEL[m.name]||m.name)+"…";return;}
     if(m.type==="error"){
       console.error("worker:",m.message);
       wk.terminate();__worker=null;   // fall back to the main thread
@@ -8206,7 +8345,7 @@ function renderLegend(){
     case "noise":h+=legGrad(rampCss("heat",0),rampCss("heat",1),"45 dB","75 dB","L<sub>den</sub> .");break;
     case "bio":h+=legGrad(rampCss("green",0),rampCss("green",1),"low","high","Habitat quality; estuaries, ancient woods and disused rail corridors score highest.");break;
   }
-  el.innerHTML=h||"<span style='color:var(--ink2)'>—</span>";
+  el.innerHTML=h||"<span style='color:var(--ink2)'>–</span>";
 }
 
 /* ---------- economy panel ---------- */
